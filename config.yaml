@@ -1,0 +1,23 @@
+version: "1.0.0"
+application: "servidores"
+servers:
+  - server:
+    name: "Servidor 1"
+    config:
+      os: "Ubuntu"
+      memory: "32GB"
+      disk: "400GB"
+    connect:
+      type_connection: "SSH"
+      user: ""
+      password: ""
+  - server:
+    name: "Servidor 2"
+    config:
+      os: "Red Hat"
+      memory: "100GB"
+      disk: "16TB"
+    connect:
+      type_connection: "SSH_KEY"
+      user: ""
+      location: ""
