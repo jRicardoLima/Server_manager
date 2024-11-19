@@ -1,6 +1,6 @@
 
 use serde::{de::Error, Deserialize, Serialize};
-use std::{fs::read_to_string, result::Result};
+use std::{fs::read_to_string, result::Result, vec};
 
 
 #[derive(Debug,PartialEq, Eq, Serialize ,Deserialize,Clone)]
@@ -12,9 +12,10 @@ pub enum ConnectionType {
 
 #[derive(Debug,PartialEq, Eq, Serialize, Deserialize,Clone)]
 pub struct ServerDetails {
-    name: String,
+    pub name: String,
     config: ServerConfig,
-    connect: ServerConnect
+    connect: ServerConnect,
+    commands: Vec<ServerCommands>,
 }
 
 #[derive(Debug,PartialEq, Eq, Serialize, Deserialize,Clone,Default)]
@@ -37,8 +38,13 @@ impl Default for ConnectionType {
         ConnectionType::SSH
     }
 }
+#[derive(Debug,PartialEq, Eq,Serialize, Deserialize,Clone,Default)]
+pub struct ServerCommands {
+    name: String,
+    exec: Vec<String>
+}
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize,Clone)]
 pub struct ConfigYaml {
     version: String,
     application: String,
@@ -76,17 +82,42 @@ impl ConfigYaml {
         &self.servers
     }
 
-    pub fn get_info_server(&self,name_server: &str) -> Option<(ServerConfig,ServerConnect)> {
+    pub fn get_info_server(&self,name_server: &str) -> Option<(ServerConfig,ServerConnect,Vec<ServerCommands>)> {
 
         self.servers.iter()
                     .find(| &item | item.name == name_server)
                     .map(| server | {
-                        (server.config.clone(),server.connect.clone())
+                        (server.config.clone(),server.connect.clone(),server.commands.clone())
                     })
     }
 
     pub fn get_quantity_servers(&self) -> usize {
         self.servers.len()
+    }
+
+}
+
+impl ServerConfig {
+    pub fn os(&self) -> &str {
+        &self.os
+    }
+
+    pub fn memory(&self) -> &str {
+        &self.memory
+    }
+
+    pub fn disk(&self) -> &str {
+        &self.disk
+    }
+}
+
+impl ServerCommands {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn commands(&self) -> &Vec<String> {
+        &self.exec
     }
 }
 
@@ -105,11 +136,12 @@ fn test_parsing_yaml_file() {
             assert_eq!(server1.config.memory,"32GB");
             assert_eq!(server1.config.os,"Ubuntu");
             assert_eq!(server1.connect.type_connection,ConnectionType::SSH);
+            assert_eq!(server1.commands.len(),2);
 
-            let server2 = &config.servers[1];
-            assert_eq!(server2.config.memory,"100GB");
-            assert_eq!(server2.config.os,"Red Hat");
-            assert_eq!(server2.connect.type_connection,ConnectionType::SSH_KEY);
+//            let server2 = &config.servers[1];
+//            assert_eq!(server2.config.memory,"100GB");
+//            assert_eq!(server2.config.os,"Red Hat");
+//            assert_eq!(server2.connect.type_connection,ConnectionType::SSH_KEY);
 
         },
         Err(e) => panic!("Erro ao ler o arquivo Yaml: {:?}",e)
@@ -138,21 +170,54 @@ fn test_info_server() {
     let config = ConfigYaml::new(&path).unwrap();
 
     let expected_config = ServerConfig{
-        os: String::from("Red Hat"),
-        memory: String::from("100GB"),
-        disk: String::from("16TB"),
+        os: String::from("Ubuntu"),
+        memory: String::from("32GB"),
+        disk: String::from("400GB"),
     };
 
     let expected_connect = ServerConnect{
-        type_connection: ConnectionType::SSH_KEY,
+        type_connection: ConnectionType::SSH,
         user: String::from(""),
-        location: Some(String::from("")),
-        password: None
+        location: None,
+        password: Some(String::from(""))
     };
 
-    let configs = config.get_info_server("Servidor 2");
+    let expected_commands = vec![
+      ServerCommands{
+        name: String::from("Nome do comando"),
+        exec: vec![
+            String::from("mkdir {nome_pasta}"),
+            String::from("git clone {url}"),
+            String::from("touch {nome_arquivo}")
+        ]
+      },
+      ServerCommands{
+        name: String::from("Nome do comando 2"),
+        exec: vec![
+            String::from("git clone {url}"),
+            String::from("cd {nome_pasta}"),
+            String::from("composer install"),
+            String::from("chmod 777 -R {nome_pasta}"),
+            String::from("php index.php migrate"),
+            String::from("chown -R gitlab-runner:gitlab-runner ."),
+            String::from("git checkout .")
+        ]
+      }
+    ];
 
-    assert_eq!(configs, Some((expected_config,expected_connect)));
+    let configs = config.get_info_server("Msdoc");
+    let expected_tuple = Some((expected_config,expected_connect,expected_commands));
+
+    if let Some((config,connect,commands)) = &configs {
+
+        let command = &commands[0];
+
+        assert_eq!(command.name,"Nome do comando".to_string());
+        assert_eq!(commands.len(),2);
+    }
+    assert_eq!(configs,expected_tuple);
+
+
 }
 
 #[test]
@@ -161,7 +226,7 @@ fn test_info_server_configs() {
 
     let config = ConfigYaml::new(&path).unwrap();
 
-    let result = config.get_info_server("Servidor 2").unwrap();
+    let result = config.get_info_server("Casar Pet").unwrap();
 
     assert_eq!(result.0.os, "Red Hat");
     assert_eq!(result.0.memory,"100GB");

@@ -1,8 +1,7 @@
 version: "1.0.0"
 application: "servidores"
 servers:
-  - server:
-    name: "Servidor 1"
+  - name: "Msdoc"
     config:
       os: "Ubuntu"
       memory: "32GB"
@@ -11,8 +10,22 @@ servers:
       type_connection: "SSH"
       user: ""
       password: ""
-  - server:
-    name: "Servidor 2"
+    commands:
+      - name: "Atualizar Servidor"
+        exec:
+          - "mkdir {nome_pasta}"
+          - "git clone {url}"
+          - "touch {nome_arquivo}"
+      - name: "Criar cliente"
+        exec:
+          - "git clone {url}"
+          - "cd {nome_pasta}"
+          - "composer install"
+          - "chmod 777 -R {nome_pasta}"
+          - "php index.php migrate"
+          - "chown -R gitlab-runner:gitlab-runner ."
+          - "git checkout ."
+  - name: "Casar Pet"
     config:
       os: "Red Hat"
       memory: "100GB"
@@ -21,3 +34,8 @@ servers:
       type_connection: "SSH_KEY"
       user: ""
       location: ""
+    commands:
+      - name: "Fazer backup"
+        exec:
+          - "cd /var/www/html"
+          - "mkdir teste"
