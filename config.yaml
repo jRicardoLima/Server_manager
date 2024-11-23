@@ -8,9 +8,9 @@ servers:
       disk: "400GB"
     connect:
       type_connection: "SSH"
-      user: "root"
-      password: "3S~f0P:NKocI|luh!;0p"
-      ip_address: "191.96.251.64:22"
+      user: ""
+      password: ""
+      ip_address: ""
     commands:
       - name: "Atualizar Servidor"
         exec:
