@@ -1,6 +1,6 @@
 
 use serde::{de::Error, Deserialize, Serialize};
-use std::{fs::read_to_string, result::Result, vec};
+use std::result::Result;
 
 
 #[derive(Debug,PartialEq, Eq, Serialize ,Deserialize,Clone)]
@@ -29,6 +29,7 @@ pub struct ServerConfig {
 pub struct ServerConnect {
     type_connection: ConnectionType,
     user: String,
+    ip_address: String,
     location: Option<String>,
     password: Option<String>,
 }
@@ -53,17 +54,6 @@ pub struct ConfigYaml {
 
 impl ConfigYaml {
     pub fn new(path: &str) -> Result<ConfigYaml,serde_yaml_ng::Error > {
-
-//        let content_file = std::fs::read_to_string(path).unwrap();
-//
-//        let config: ConfigYaml = serde_yaml_ng::from_str(&content_file).unwrap();
-
-//        let content_file = std::fs::read_to_string(path).map_err(|e| serde_yaml_ng::Error::custom(format!("Erro ao ler o arquivo")))?;
-//
-//        let config: ConfigYaml  = serde_yaml_ng::from_str(&content_file)
-//            .map_err(|e| serde_yaml_ng::Error::custom(format!("Erro ao fazer parsing do arquivo config.yaml: {}",e)))?;
-
-        //let content = std::fs::read_to_string("path/to/file").expect("Falha ao ler o arquivo!");
 
         let content_file = match std::fs::read_to_string(path) {
             Ok(content) => content,
@@ -116,9 +106,44 @@ impl ServerCommands {
         &self.name
     }
 
+    pub fn name_mut(&mut self) -> &mut str {
+        &mut self.name
+    }
+
     pub fn commands(&self) -> &Vec<String> {
         &self.exec
     }
+
+    pub fn commands_mut(&mut self) -> &mut Vec<String> {
+        &mut self.exec
+    }
+}
+
+impl ServerConnect {
+    pub fn type_connection(&self) -> &ConnectionType {
+       &self.type_connection
+    }
+
+    pub fn user(&self) -> &String {
+        &self.user
+    }
+
+    pub fn ip_address(&self) -> &String {
+        &self.ip_address
+    }
+
+    pub fn ip_address_mut(&mut self) -> &mut String {
+        &mut self.ip_address
+    }
+
+    pub fn password(&self) -> &Option<String> {
+        &self.password
+    }
+
+    pub fn password_mut(&mut self) -> &mut Option<String> {
+        &mut self.password
+    }
+
 }
 
 #[test]
@@ -137,11 +162,6 @@ fn test_parsing_yaml_file() {
             assert_eq!(server1.config.os,"Ubuntu");
             assert_eq!(server1.connect.type_connection,ConnectionType::SSH);
             assert_eq!(server1.commands.len(),2);
-
-//            let server2 = &config.servers[1];
-//            assert_eq!(server2.config.memory,"100GB");
-//            assert_eq!(server2.config.os,"Red Hat");
-//            assert_eq!(server2.connect.type_connection,ConnectionType::SSH_KEY);
 
         },
         Err(e) => panic!("Erro ao ler o arquivo Yaml: {:?}",e)
@@ -178,13 +198,14 @@ fn test_info_server() {
     let expected_connect = ServerConnect{
         type_connection: ConnectionType::SSH,
         user: String::from(""),
+        ip_address: String::from("123456"),
         location: None,
         password: Some(String::from(""))
     };
 
     let expected_commands = vec![
       ServerCommands{
-        name: String::from("Nome do comando"),
+        name: String::from("Atualizar Servidor"),
         exec: vec![
             String::from("mkdir {nome_pasta}"),
             String::from("git clone {url}"),
@@ -192,7 +213,7 @@ fn test_info_server() {
         ]
       },
       ServerCommands{
-        name: String::from("Nome do comando 2"),
+        name: String::from("Criar cliente"),
         exec: vec![
             String::from("git clone {url}"),
             String::from("cd {nome_pasta}"),
@@ -205,14 +226,14 @@ fn test_info_server() {
       }
     ];
 
-    let configs = config.get_info_server("Msdoc");
+    let configs = config.get_info_server("Servidor 1");
     let expected_tuple = Some((expected_config,expected_connect,expected_commands));
 
     if let Some((config,connect,commands)) = &configs {
 
         let command = &commands[0];
 
-        assert_eq!(command.name,"Nome do comando".to_string());
+        assert_eq!(command.name,"Atualizar Servidor".to_string());
         assert_eq!(commands.len(),2);
     }
     assert_eq!(configs,expected_tuple);
@@ -226,7 +247,7 @@ fn test_info_server_configs() {
 
     let config = ConfigYaml::new(&path).unwrap();
 
-    let result = config.get_info_server("Casar Pet").unwrap();
+    let result = config.get_info_server("Servidor 2").unwrap();
 
     assert_eq!(result.0.os, "Red Hat");
     assert_eq!(result.0.memory,"100GB");

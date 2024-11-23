@@ -1,31 +1,26 @@
 version: "1.0.0"
 application: "servidores"
 servers:
-  - name: "Msdoc"
+  - name: "Servidor 1"
     config:
       os: "Ubuntu"
       memory: "32GB"
       disk: "400GB"
     connect:
       type_connection: "SSH"
-      user: ""
-      password: ""
+      user: "root"
+      password: "3S~f0P:NKocI|luh!;0p"
+      ip_address: "191.96.251.64:22"
     commands:
       - name: "Atualizar Servidor"
         exec:
-          - "mkdir {nome_pasta}"
-          - "git clone {url}"
-          - "touch {nome_arquivo}"
+          - "cd /home"
+          - "touch testando_comando.txt"
       - name: "Criar cliente"
         exec:
-          - "git clone {url}"
-          - "cd {nome_pasta}"
-          - "composer install"
-          - "chmod 777 -R {nome_pasta}"
-          - "php index.php migrate"
-          - "chown -R gitlab-runner:gitlab-runner ."
-          - "git checkout ."
-  - name: "Casar Pet"
+          - "cd /home"
+          - "touch testando_comando_dois.txt"
+  - name: "Servidor 2"
     config:
       os: "Red Hat"
       memory: "100GB"
@@ -34,6 +29,7 @@ servers:
       type_connection: "SSH_KEY"
       user: ""
       location: ""
+      ip_address: ""
     commands:
       - name: "Fazer backup"
         exec:

@@ -1,23 +1,47 @@
 mod parser;
-
+mod connection;
 use core::panic;
-use std::{io,time::Duration};
-use parser::{ConfigYaml, ServerCommands};
+use std::{io, sync::{Arc, Mutex}};
+use connection::SSH;
+use parser::{ConfigYaml, ServerCommands, ServerConnect};
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction,Layout},
     style::{Color, Modifier, Style},
+    terminal,
     text::{Span,Spans},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Terminal
 
 };
 use crossterm::{
-    event::{self,DisableMouseCapture,EnableMouseCapture,Event,KeyCode}, execute, terminal::{disable_raw_mode,enable_raw_mode,EnterAlternateScreen,LeaveAlternateScreen}
+    event::{self,DisableMouseCapture,EnableMouseCapture,Event,KeyCode}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}
 };
+use tokio::time::{sleep,Duration};
 
-fn main() -> Result<(), io::Error> {
-    enable_raw_mode()?;
+async fn update_info_paragraph(
+    output_messages: Arc<Mutex<String>>,
+     area: tui::layout::Rect
+){
+    let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout())).unwrap();
+    let mut out = output_messages.lock().unwrap();
+
+    let info_paragraph = Paragraph::new(out.clone())
+    .block(
+        Block::default()
+                         .title("Saída das informações")
+                         .borders(Borders::ALL)
+                         .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        ).style(Style::default().fg(Color::White));
+
+    terminal.draw(|f| {
+        f.render_widget(info_paragraph, area);
+    }).unwrap();
+}
+
+
+#[tokio::main]
+async fn main() -> Result<(), io::Error> {
 
     let mut stdout = io::stdout();
     execute!(stdout,EnterAlternateScreen,EnableMouseCapture)?;
@@ -42,28 +66,47 @@ fn main() -> Result<(), io::Error> {
     let mut input_info = String::new();
 
     let mut commands_server: Vec<ServerCommands> = vec![];
+    let mut server_connect: ServerConnect = ServerConnect::default();
+    let mut  output_messages_async: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     
-    loop {
-        terminal.draw(|f| {
+    let layout_areas = {
+        let size = terminal.size()?;
 
-
-            let size = f.size();
-
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
+        let chunks = Layout::default()
+        .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Percentage(80),
                     Constraint::Percentage(20),
                     ])
                 .split(size);
 
-            let top_chunks = Layout::default()
+        let top_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
                     Constraint::Percentage(30),
                     Constraint::Percentage(70),
                     ])
                 .split(chunks[0]);
+
+        let main_block_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(3),
+                Constraint::Length(1),
+                Constraint::Min(5)
+            ]).split(top_chunks[1]);
+
+        (chunks,top_chunks,main_block_chunks)
+    };
+
+    enable_raw_mode()?;
+    tokio::spawn(async move {
+
+    });
+    loop {
+        terminal.draw(|f| {
+
+            let (chunks,top_chunks,main_block_chunks) = &layout_areas;
 
             let mut sidebar_items = vec![];
 
@@ -72,9 +115,6 @@ fn main() -> Result<(), io::Error> {
                                          .map(|item| ListItem::new(item.name.clone()))
                                          .collect();
             }
-
-//            let mut list_state = ListState::default();
-//            list_state.select(Some(selected_index));
 
             let mut sidebar_state = ListState::default();
 
@@ -97,7 +137,7 @@ fn main() -> Result<(), io::Error> {
                 );
 
             f.render_stateful_widget(sidebar, top_chunks[0],&mut sidebar_state);
-            //f.render_widget(sidebar, top_chunks[0]);
+
 
 
             let mut server_commands = vec![];
@@ -126,7 +166,7 @@ fn main() -> Result<(), io::Error> {
             let info_paragraph = Paragraph::new(input_info.clone())
             .block(
                     Block::default()
-                         .title("Informações do Servidor")
+                         .title("Saída das informações")
                          .borders(Borders::ALL)
                          .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                 ).style(Style::default().fg(Color::White));
@@ -150,18 +190,7 @@ fn main() -> Result<(), io::Error> {
 
 
             f.render_stateful_widget(main_block, main_block_chunks[2], &mut mainblock_state);
-            //            let main_block = Block::default()
-            //                .title("Opções")
-            //                .borders(Borders::ALL)
-            //                .style(Style::default().fg(Color::Green).add_modifier(Modifier::ITALIC));
-            //
-            //            let info_paragraph = Paragraph::new(input_info.clone())
-            //            .block(main_block)
-            //            .style(Style::default().fg(Color::White));
-            //
-            //
-            //
-            //            f.render_widget(info_paragraph, top_chunks[1]);
+
 
             let bottom_block = Paragraph::new(vec![
                 Spans::from(vec![
@@ -189,7 +218,11 @@ fn main() -> Result<(), io::Error> {
         if crossterm::event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Esc => break,
+                    KeyCode::Esc => {
+                        focused_block  = "sidebar";
+
+                        break
+                    },
                     KeyCode::Up => {
                         if focused_block == "sidebar" {
                             if selected_index > 0 {
@@ -241,6 +274,7 @@ fn main() -> Result<(), io::Error> {
                                             config.os(), config.memory(), config.disk()
                                             );
                                         commands_server = commands;
+                                        server_connect = connect;
                                         mainblock_selected_index = Some(0);
                                     },
                                     None => {
@@ -251,9 +285,70 @@ fn main() -> Result<(), io::Error> {
                             }
                         } else if focused_block == "mainblock" {
                             if let Some(index) = mainblock_selected_index {
-                                let selected_command = &commands_server[index];
+                                 let selected_command = &commands_server[index];
+                                 let (_,_,main_block_chunks) = &layout_areas;
 
-                                println!("Executando comando: {}", selected_command.name());
+                                 let ssh = SSH::new(&server_connect);
+
+                                 output_messages_async = Arc::new(Mutex::new(String::from("Iniciando conexão com o servidor")));
+
+                                 let messages = output_messages_async.clone();
+                                 let blocks = main_block_chunks[0];
+
+                                 tokio::spawn(async move {
+                                      update_info_paragraph(messages,blocks).await;
+                                 });
+                                 sleep(Duration::from_secs(5)).await;
+
+
+
+                                 let session = match ssh.connect() {
+                                     Ok(sess) => {
+                                         output_messages_async = Arc::new(Mutex::new(String::from("Conexão com o servidor estabelecida....")));
+
+                                         let messages = output_messages_async.clone();
+                                         tokio::spawn(async move {
+                                             update_info_paragraph(messages,blocks).await;
+                                        });
+                                        sleep(Duration::from_secs(5)).await;
+
+                                         sess
+                                     },
+                                     Err(e) => {
+                                         output_messages_async = Arc::new(Mutex::new(String::from(format!("Não foi possivel conectar-se ao servidor, {:?}",e))));
+
+                                         let messages = output_messages_async.clone();
+                                         tokio::spawn(async move {
+                                             update_info_paragraph(messages,blocks).await;
+                                        });
+                                        sleep(Duration::from_secs(5)).await;
+
+                                         panic!("Não foi possivel conectar-se ao servidor: {:?}",e)
+                                     }
+                                 };
+
+
+                               output_messages_async = Arc::new(Mutex::new(String::from("Executando comandos no servidor...")));
+
+                               let messages = output_messages_async.clone();
+                               tokio::spawn(async move {
+                                   update_info_paragraph(messages,blocks).await;
+                              });
+                              sleep(Duration::from_secs(5)).await;
+
+                                let output_command = SSH::execute_commands(&selected_command, session);
+
+
+                               output_messages_async = Arc::new(Mutex::new(String::from(format!("Saída do comando: {}",output_command))));
+
+                               let messages = output_messages_async.clone();
+                               tokio::spawn(async move {
+                                   update_info_paragraph(messages,blocks).await;
+                              });
+                              sleep(Duration::from_secs(5)).await;
+
+
+
                             }
                         }
 
