@@ -3,7 +3,8 @@ mod connection;
 use core::panic;
 use std::{io, sync::{Arc, Mutex}};
 use connection::SSH;
-use parser::{ConfigYaml, ServerCommands, ServerConnect};
+use parser::{ConfigYaml, ConnectionType, ServerCommands, ServerConnect};
+use ssh2::Session;
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction,Layout},
@@ -48,7 +49,7 @@ async fn main() -> Result<(), io::Error> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut input = String::new();
+    //let mut input = String::new();
 
     let mut selected_index = 0;
     let mut mainblock_selected_index: Option<usize> = None;
@@ -100,9 +101,7 @@ async fn main() -> Result<(), io::Error> {
     };
 
     enable_raw_mode()?;
-    tokio::spawn(async move {
 
-    });
     loop {
         terminal.draw(|f| {
 
@@ -153,15 +152,6 @@ async fn main() -> Result<(), io::Error> {
             if let Some(index) = mainblock_selected_index {
                 mainblock_state.select(Some(index));
             }
-
-
-            let main_block_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(3),
-                Constraint::Length(1),
-                Constraint::Min(5)
-            ]).split(top_chunks[1]);
 
             let info_paragraph = Paragraph::new(input_info.clone())
             .block(
@@ -300,32 +290,61 @@ async fn main() -> Result<(), io::Error> {
                                  });
                                  sleep(Duration::from_secs(5)).await;
 
+                                 let mut session = Session::new()?;
+                                 if *server_connect.type_connection() == ConnectionType::SSH {
 
+                                     session = match ssh.connect() {
+                                         Ok(sess) => {
+                                             output_messages_async = Arc::new(Mutex::new(String::from("Conexão com o servidor estabelecida....")));
 
-                                 let session = match ssh.connect() {
-                                     Ok(sess) => {
-                                         output_messages_async = Arc::new(Mutex::new(String::from("Conexão com o servidor estabelecida....")));
+                                             let messages = output_messages_async.clone();
+                                             tokio::spawn(async move {
+                                                 update_info_paragraph(messages,blocks).await;
+                                            });
+                                            sleep(Duration::from_secs(5)).await;
 
-                                         let messages = output_messages_async.clone();
-                                         tokio::spawn(async move {
-                                             update_info_paragraph(messages,blocks).await;
-                                        });
-                                        sleep(Duration::from_secs(5)).await;
+                                             sess
+                                         },
 
-                                         sess
-                                     },
-                                     Err(e) => {
-                                         output_messages_async = Arc::new(Mutex::new(String::from(format!("Não foi possivel conectar-se ao servidor, {:?}",e))));
+                                         Err(e) => {
+                                             output_messages_async = Arc::new(Mutex::new(String::from(format!("Não foi possivel conectar-se ao servidor, {:?}",e))));
 
-                                         let messages = output_messages_async.clone();
-                                         tokio::spawn(async move {
-                                             update_info_paragraph(messages,blocks).await;
-                                        });
-                                        sleep(Duration::from_secs(5)).await;
+                                             let messages = output_messages_async.clone();
+                                             tokio::spawn(async move {
+                                                 update_info_paragraph(messages,blocks).await;
+                                            });
+                                            sleep(Duration::from_secs(5)).await;
 
-                                         panic!("Não foi possivel conectar-se ao servidor: {:?}",e)
+                                             panic!("Não foi possivel conectar-se ao servidor: {:?}",e)
+                                         }
                                      }
-                                 };
+                                 } else {
+                                     session = match ssh.connect_with_private_key() {
+                                         Ok(sess) => {
+                                             output_messages_async = Arc::new(Mutex::new(String::from("Conexão com o servidor estabelecida SSH_KEY....")));
+
+                                             let messages = output_messages_async.clone();
+                                             tokio::spawn(async move {
+                                                 update_info_paragraph(messages,blocks).await;
+                                            });
+                                            sleep(Duration::from_secs(5)).await;
+
+                                             sess
+                                         },
+
+                                         Err(e) => {
+                                             output_messages_async = Arc::new(Mutex::new(String::from(format!("Não foi possivel conectar-se ao servidor, {:?}",e))));
+
+                                             let messages = output_messages_async.clone();
+                                             tokio::spawn(async move {
+                                                 update_info_paragraph(messages,blocks).await;
+                                            });
+                                            sleep(Duration::from_secs(5)).await;
+
+                                             panic!("Não foi possivel conectar-se ao servidor: {:?}",e)
+                                         }
+                                     }
+                                 }
 
 
                                output_messages_async = Arc::new(Mutex::new(String::from("Executando comandos no servidor...")));
@@ -336,10 +355,10 @@ async fn main() -> Result<(), io::Error> {
                               });
                               sleep(Duration::from_secs(5)).await;
 
-                                let output_command = SSH::execute_commands(&selected_command, session);
+                                let output_command = ssh.execute_commands(&selected_command, session);
 
 
-                               output_messages_async = Arc::new(Mutex::new(String::from(format!("Saída do comando: {}",output_command))));
+                               output_messages_async = Arc::new(Mutex::new(String::from(format!("Comandos executados com sucesso. Saída: {}",output_command))));
 
                                let messages = output_messages_async.clone();
                                tokio::spawn(async move {

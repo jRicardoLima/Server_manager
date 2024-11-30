@@ -144,6 +144,14 @@ impl ServerConnect {
         &mut self.password
     }
 
+    pub fn location(&self) -> &Option<String> {
+        &self.location
+    }
+
+    pub fn location_mut(&mut self) -> &mut Option<String> {
+        &mut self.location
+    }
+
 }
 
 #[test]
